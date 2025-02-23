@@ -1,0 +1,16 @@
+{
+  "name": "backend-home-assignment-junior",
+  "version": "1.0.0",
+  "description": "## Requirements Use the file `data.csv` as the data source.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "backend-home-assignment-junior": "file:",
+    "express": "^4.19.2",
+    "papaparse": "^5.5.2"
+  }
+}
