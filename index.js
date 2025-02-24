@@ -45,7 +45,7 @@ app.get('/users', async (req, res, next) => {
                 result = await usersModel.getUsersByName(query.name);
                 break;
             case 'age':
-                result = await usersModel.getUsersByAge(parseInt(query.age));
+                result = await usersModel.getUsersByAge(query.age);
                 break;
             default:
                 return res.status(400).json({

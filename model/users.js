@@ -78,7 +78,7 @@ const populateUsersByName = (user) => {
 }
 
 /**
- * We store users by year-month and not by day to reduce granularity and make the search faster.
+ * We store users by year-month and without day to reduce granularity and make the search faster.
  * 
  * @param {User} user 
  */
@@ -159,7 +159,7 @@ const getUsersByName = (name) => {
  */
 const getUsersByAge = (age) => {
     const currentDate = new Date();
-    const birthYear = currentDate.getFullYear() - age;
+    const birthYear = currentDate.getFullYear() - parseInt(age);
     const birthMonth = currentDate.getMonth();
 
     const yearMonth = `${birthYear}-${birthMonth}`;
