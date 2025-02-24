@@ -1,8 +1,9 @@
 const fs = require('fs');
 const papa = require('papaparse');
+const { Trie } = require('./trie.js');
 const usersById = {};
 const usersByCountry = {};
-const usersByName = {};
+const usersByName = new Trie();
 const usersByDob = {};
 
 class User {
@@ -31,16 +32,18 @@ const loadData = () => {
     papa.parse(fs.createReadStream('data.csv'), {
         dynamicTyping: true,
         header: true,
-        step: (row) => {
-            const user = new User(row.data.Id, row.data.Name, row.data.DOB, row.data.Country, row.data.Email);
-        
-            populateUsersById(user);
-            populateUsersByCountry(user);
-            populateUsersByName(user);
-            populateUsersByDob(user);
-        }
+        step: handlePapaRow,
     });
 };
+
+const handlePapaRow = (row) => {
+    const user = new User(row.data.Id, row.data.Name, row.data.DOB, row.data.Country, row.data.Email);
+
+    populateUsersById(user);
+    populateUsersByCountry(user);
+    populateUsersByName(user);
+    populateUsersByDob(user);
+}
 
 /**
  * 
@@ -67,71 +70,81 @@ const populateUsersByCountry = (user) => {
  */
 const populateUsersByName = (user) => {
     const nameLower = user.name.toLowerCase();
-    if (!usersByName[nameLower]) {
-        usersByName[nameLower] = [];
+    usersByName.insert(nameLower, user);
+
+    for (const name of nameLower.split(' ')) {
+        usersByName.insert(name, user);
     }
-
-    usersByName[nameLower].push(user);
-
-    nameLower.split(' ').forEach(name => {
-        if (!usersByName[name]) {
-            usersByName[name] = [];
-        }
-        usersByName[name].push(user);
-    });
 }
 
 /**
+ * We store users by year-month and not by day to reduce granularity and make the search faster.
  * 
  * @param {User} user 
  */
 const populateUsersByDob = (user) => {
-    if (!usersByDob[user.dob]) {
-        usersByDob[user.dob] = [];
+    const dob = new Date(user.dob);
+    const yearMonth = `${dob.getFullYear()}-${dob.getMonth()}`;
+
+    if (!usersByDob[yearMonth]) {
+        usersByDob[yearMonth] = [];
     }
 
-    usersByDob[user.dob].push(user);
+    usersByDob[yearMonth].push(user);
 }
 
+/**
+ * 
+ * @param {string} id 
+ * @returns 
+ */
 const getUserById = (id) => {
     return usersById[id];
 };
 
+/**
+ * 
+ * @param {string} country 
+ * @returns 
+ */
 const getUsersByCountry = (country) => {
     return usersByCountry[country] || [];
 };
 
 /**
  * Following the instructions I gathered that the search should return a user
- * for the fullest match, then for first/last name match and finally for a partial match.
- * 
- * I thought about using a trie to store the names, but I figured that a simple map was good enough.
+ * for the fullest match, then for first/last name match and finally for a partial match,
+ * and return all the accumulated results. If this is not the case then we can return the first match.
  * 
  * @param {string} name 
  * @returns 
  */
 const getUsersByName = (name) => {
     const lowerName = name.toLowerCase();
-    const result = new Map();
+    const result = new Map(); // Using a map to avoid duplicates
 
     // Full match
-    if (usersByName[lowerName]) {
-        usersByName[lowerName].forEach(user => result.set(user.id, user));
+    for (const user of usersByName.search(lowerName)) {
+        result.set(user.id, user);
     }
 
-    // first/last name match
+    // First/last name match
     const names = lowerName.split(' ');
-    names.forEach(n => {
-        if (usersByName[n]) {
-            usersByName[n].forEach(user => result.set(user.id, user));
+    for (const name of names) {
+        for (const user of usersByName.search(name)) {
+            result.set(user.id, user);
         }
-    });
+    }
 
     // Partial match (minimum 3 chars)
     if (lowerName.length >= 3) {
-        for (const key in usersByName) {
-            if (key.startsWith(lowerName) && !names.includes(key)) {
-                usersByName[key].forEach(user => result.set(user.id, user));
+        for (const key in usersByName.root.children) {
+            if (!key.startsWith(lowerName) || names.includes(key)) {
+                continue;
+            }
+
+            for (const user of usersByName.search(key)) {
+                result.set(user.id, user);
             }
         }
     }
@@ -139,16 +152,18 @@ const getUsersByName = (name) => {
     return Array.from(result.values());
 };
 
-
 /**
  * 
  * @param {number} age 
  * @returns 
  */
 const getUsersByAge = (age) => {
-    const birthDate = new Date();
-    birthDate.setFullYear(Math.round(birthDate.getFullYear() - age));
-    return usersByDob[birthDate.toLocaleDateString('en-GB')] || [];
+    const currentDate = new Date();
+    const birthYear = currentDate.getFullYear() - age;
+    const birthMonth = currentDate.getMonth();
+
+    const yearMonth = `${birthYear}-${birthMonth}`;
+    return usersByDob[yearMonth] || [];
 };
 
 
@@ -163,12 +178,7 @@ const deleteUser = (id) => {
     usersByCountry[user.country] = countryUsers.filter(u => u.id !== id);
 
     // Remove from usersByName
-    const lowerName = user.name.toLowerCase();
-    const names = lowerName.split(' ');
-    names.push(lowerName);
-    names.forEach(name => {
-        usersByName[name] = usersByName[name].filter(u => u.id !== id);
-    });
+    usersByName.delete(user);
 
     // Remove from usersByAge
     usersByDob[user.dob] = usersByDob[user.dob].filter(u => u.id !== id);
